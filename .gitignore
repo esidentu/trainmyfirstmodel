@@ -1,0 +1,15 @@
+# Python and notebook cache
+__pycache__/
+.ipynb_checkpoints/
+.venv/
+venv/
+
+# Pac-Man training outputs that can get large
+pacman_runs/
+*.pt
+*.pth
+*.zip
+
+# Local OS/editor files
+.DS_Store
+Thumbs.db
