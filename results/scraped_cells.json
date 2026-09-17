@@ -1,0 +1,498 @@
+[
+  {
+    "aria": "Cell 0: Text cell: train an agent to play Ms. Pac-Man",
+    "cellType": "markdown",
+    "id": "cell-pacman-00",
+    "index": 0,
+    "output": "",
+    "source": "train an agent to play Ms. Pac-Man\n\nChoose three numbers. Run the notebook. Watch what the agent learns.\n\nThe agent sees the game screen, chooses a move, and receives a reward from the game. A neural network learns a value for each move through trial and error.\n\nOpen this notebook in Jupyter, VS Code, or Google Colab. In Colab, select Runtime → Change runtime type → T4 GPU if available.\nChoose your three settings in the next cell.\nChoose Run All (Colab: Runtime → Run all). Setup runs automatically. Local gameplay samples open above VS Code in a floating player at 4× speed; a copy also appears inline.\nCompare the five before/after scores and save your results.\n\nIf using Claude Code or Codex, ask it to run this notebook. The code tells it to ask you for your three choices before training.\n\nA short run checks that everything works. Learning useful Atari behavior can take much longer; more episodes do not guarantee better play."
+  },
+  {
+    "aria": "Cell 1: Text cell: your three choices",
+    "cellType": "markdown",
+    "id": "cell-pacman-01",
+    "index": 1,
+    "output": "",
+    "source": "1. your three choices\nSetting\tMeaning\tStarting point\nExploration\tFraction of training moves chosen randomly. 0.20 means 20%.\t0.20\nEpisodes\tHow many games to train on. Each game ends at game over or a fixed time limit.\t100\nLearning rate\tHow much the network changes at each update.\t0.0001\n\nChange only the three numbers below. Try 5 episodes for a first check, then a longer run. For this experiment, exploration stays constant so its meaning is easy to compare across runs. The short replay warm-up uses random moves before learning starts."
+  },
+  {
+    "aria": "Cell 2: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-02",
+    "index": 2,
+    "output": "",
+    "source": "# AI ASSISTANT INSTRUCTION:\n# Before running training, ask the student:\n# \"Which exploration rate (0 to 1), number of episodes (positive whole number),\n# and learning rate (greater than 0 and at most 1) do you want to use?\"\n# Explain the three choices briefly. Wait for their answer, then edit ONLY\n# these three values. If they already chose values in this conversation,\n# use those choices without asking again. Do not silently choose for them.\n# The remaining cells are ready to run without student edits.\n\nEXPLORATION = 0.20\nEPISODES = 100\nLEARNING_RATE = 0.0001\n"
+  },
+  {
+    "aria": "Cell 3: Text cell: check the choices",
+    "cellType": "markdown",
+    "id": "cell-pacman-03",
+    "index": 3,
+    "output": "",
+    "source": "check the choices\n\nThese checks catch typos before a long experiment starts. They do not change your settings."
+  },
+  {
+    "aria": "Cell 4: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-04",
+    "index": 4,
+    "output": "Your experiment: 20% exploration, 100 episodes, learning rate 0.0001.\n",
+    "source": "import math\nassert (\n    isinstance(EXPLORATION, (int, float))\n    and not isinstance(EXPLORATION, bool)\n    and math.isfinite(EXPLORATION) and 0 <= EXPLORATION <= 1\n), \"Exploration must be between 0 and 1.\"\nassert (\n    isinstance(EPISODES, int) and not isinstance(EPISODES, bool) and EPISODES > 0\n), \"Episodes must be a positive whole number.\"\nassert (\n    isinstance(LEARNING_RATE, (int, float))\n    and not isinstance(LEARNING_RATE, bool)\n    and math.isfinite(LEARNING_RATE) and 0 < LEARNING_RATE <= 1\n), \"Learning rate must be greater than 0 and at most 1.\"\nprint(f\"Your experiment: {EXPLORATION:.0%} exploration, {EPISODES} episodes, learning rate {LEARNING_RATE:g}.\")\n"
+  },
+  {
+    "aria": "Cell 5: Text cell: automatic setup",
+    "cellType": "markdown",
+    "id": "cell-pacman-05",
+    "index": 5,
+    "output": "",
+    "source": "2. automatic setup\n\nRun this once per fresh session. It installs missing packages into the notebook's Python environment. Python 3.11–3.13 is recommended. No separate game download is needed. For local popup playback, keep pacman_player.py next to this notebook and use a Python kernel with Tk (the local py313 kernel supports it). Colab and machines without a desktop keep the fast inline preview. If a package was already imported before an upgrade, restart the kernel and choose Run All again."
+  },
+  {
+    "aria": "Cell 6: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-06",
+    "index": 6,
+    "output": "   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 5.1/5.1 MB 33.5 MB/s eta 0:00:00\n   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 62.0/62.0 MB 9.9 MB/s eta 0:00:00\n",
+    "source": "%pip -q install \"torch>=2.6,<3\" \"gymnasium==1.3.0\" \"ale-py==0.11.2\" \"opencv-python-headless==4.14.0.94\" \"numpy>=2,<3\" \"matplotlib>=3.9,<4\" \"Pillow>=10,<13\"\n"
+  },
+  {
+    "aria": "Cell 7: Text cell: load the tools",
+    "cellType": "markdown",
+    "id": "cell-pacman-07",
+    "index": 7,
+    "output": "",
+    "source": "load the tools\n\nGymnasium runs the game, PyTorch learns from its screens, and Pillow saves gameplay. This cell also prints the actual Python and package versions, so runs can be compared."
+  },
+  {
+    "aria": "Cell 8: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-08",
+    "index": 8,
+    "output": "Python 3.13.15 | Linux-6.6.122+-x86_64-with-glibc2.39\n{'torch': '2.11.0+cu128', 'gymnasium': '1.3.0', 'ale-py': '0.11.2', 'opencv-python-headless': '4.14.0.94', 'numpy': '2.1.3', 'matplotlib': '3.10.0', 'Pillow': '11.3.0'}\n",
+    "source": "import csv\nimport json\nimport platform\nimport random\nimport shutil\nimport time\nfrom collections import deque\nfrom datetime import datetime\nfrom pathlib import Path\nfrom importlib.metadata import version\n\nimport ale_py\nimport gymnasium as gym\nimport matplotlib.pyplot as plt\nimport numpy as np\nimport torch\nfrom torch import nn\nfrom PIL import Image as PILImage\nfrom IPython.display import Image, FileLink, display\n\ngym.register_envs(ale_py)\n# Keep CPU thread overhead manageable on laptops.\ntorch.set_num_threads(min(4, torch.get_num_threads()))\n\n\nVERSIONS = {p: version(p) for p in ['torch', 'gymnasium', 'ale-py', 'opencv-python-headless', 'numpy', 'matplotlib', 'Pillow']}\nprint(f\"Python {platform.python_version()} | {platform.platform()}\")\nprint(VERSIONS)\n"
+  },
+  {
+    "aria": "Cell 9: Text cell: fixed experiment settings",
+    "cellType": "markdown",
+    "id": "cell-pacman-09",
+    "index": 9,
+    "output": "",
+    "source": "fixed experiment settings\n\nThese values keep experiments comparable. One decision advances four game frames. The agent remembers 5,000 past decisions and learns from 32 at a time. The first 1,000 decisions collect experience; after that, learning happens every four decisions. You only need to edit the three choices in section 1."
+  },
+  {
+    "aria": "Cell 10: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-10",
+    "index": 10,
+    "output": "",
+    "source": "# Fixed classroom settings. Students only need the three choices above.\nSEED = 42\nMAX_STEPS = 3000          # Agent decisions per game, about 200 seconds of game time.\nFRAME_SKIP = 4           # Four emulator frames per agent decision, applied once.\nREPLAY_CAPACITY = 5000   # About 168 MiB of pixel data, allocated gradually.\nBATCH_SIZE = 32\nWARMUP_STEPS = 1000      # Random-action collection before any weight updates.\nTRAIN_EVERY = 4          # One update every four training decisions.\nTARGET_EVERY = 1000      # Copy learned weights to target every 1,000 decisions.\nGAMMA = 0.99             # How much future rewards count.\nDEMO_EVERY = 25          # Episodes between gameplay demonstrations.\nEVAL_SEEDS = [101, 202, 303, 404, 505]\nEVAL_EXPLORATION = 0.05  # Identical before/after; independent of training choice.\n\n"
+  },
+  {
+    "aria": "Cell 11: Text cell: faster sample playback",
+    "cellType": "markdown",
+    "id": "cell-pacman-11",
+    "index": 11,
+    "output": "",
+    "source": "faster sample playback\n\nSamples play 4× faster: 20 seconds of game time takes about five seconds to watch. We save every fourth preview frame and keep a normal display interval, avoiding tiny GIF delays that viewers often clamp. This only changes the recording and playback; every game decision still runs normally.\n\nLocal samples open automatically in an always-on-top popup with Pause, Replay, and a pin toggle. Each sample plays exactly twice and stops on its final frame. Replay starts two more plays. Closing the popup leaves training running. Set SHOW_POPUPS = False for inline playback only."
+  },
+  {
+    "aria": "Cell 12: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-12",
+    "index": 12,
+    "output": "",
+    "source": "PREVIEW_SPEED = 4\nPREVIEW_PLAYS = 2\nSHOW_POPUPS = True\nPREVIEW_SECONDS = 20\nPREVIEW_STRIDE = PREVIEW_SPEED\nPREVIEW_DECISIONS = round(PREVIEW_SECONDS * 60 / FRAME_SKIP)\nPREVIEW_FRAME_MS = round(1000 * FRAME_SKIP / 60)\n"
+  },
+  {
+    "aria": "Cell 13: Text cell: the game and the learning rule",
+    "cellType": "markdown",
+    "id": "cell-pacman-13",
+    "index": 13,
+    "output": "",
+    "source": "3. the game and the learning rule\n\nThe network sees four grayscale 84 × 84 screens so it can infer movement. Its outputs are estimated future rewards for the available moves, not probabilities.\n\nThe agent keeps past experiences in a small replay memory. It samples them to update the network. A second, slower-changing network supplies the learning target:\n\ntarget = reward + discounted value of the next screen\n\nAt game over, there is no future reward. At a time limit, the game could have continued, so we keep the future-value term. Learning uses rewards clipped to −1 through +1; every score you see is the original game score. The implementation below is ready to use. You do not need to edit it."
+  },
+  {
+    "aria": "Cell 14: Text cell: 3a. turn game screens into observations",
+    "cellType": "markdown",
+    "id": "cell-pacman-14",
+    "index": 14,
+    "output": "",
+    "source": "3a. turn game screens into observations\n\nStart Ms. Pac-Man, reduce each screen to 84 × 84 grayscale pixels, and stack four screens. A single image shows position; a short sequence also reveals movement. Reset starts with four copies of the new game screen."
+  },
+  {
+    "aria": "Cell 15: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-15",
+    "index": 15,
+    "output": "",
+    "source": "def make_env():\n    env = gym.make(\"ALE/MsPacman-v5\", frameskip=1,\n                   repeat_action_probability=0.25, render_mode=\"rgb_array\")\n    env = gym.wrappers.AtariPreprocessing(\n        env, noop_max=30, frame_skip=FRAME_SKIP, screen_size=84,\n        terminal_on_life_loss=False, grayscale_obs=True, scale_obs=False)\n    env = gym.wrappers.FrameStackObservation(env, stack_size=4, padding_type=\"reset\")\n    return gym.wrappers.TimeLimit(env, max_episode_steps=MAX_STEPS)\n"
+  },
+  {
+    "aria": "Cell 16: Text cell: 3b. estimate the value of each move",
+    "cellType": "markdown",
+    "id": "cell-pacman-16",
+    "index": 16,
+    "output": "",
+    "source": "3b. estimate the value of each move\n\nThe convolution layers look for patterns in the screens. The final layer produces one number per move: its estimated future reward. forward scales pixel values from 0–255 to 0–1 before using them."
+  },
+  {
+    "aria": "Cell 17: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-17",
+    "index": 17,
+    "output": "",
+    "source": "class DQN(nn.Module):\n    def __init__(self, n_actions):\n        super().__init__()\n        # Read visual patterns, then produce one value per available move.\n        self.layers = nn.Sequential(\n            nn.Conv2d(4, 32, 8, stride=4), nn.ReLU(),\n            nn.Conv2d(32, 64, 4, stride=2), nn.ReLU(),\n            nn.Conv2d(64, 64, 3, stride=1), nn.ReLU(),\n            nn.Flatten(), nn.Linear(3136, 512), nn.ReLU(),\n            nn.Linear(512, n_actions))\n\n    def forward(self, screens):\n        return self.layers(screens.float() / 255.0)\n"
+  },
+  {
+    "aria": "Cell 18: Text cell: 3c. remember past experience",
+    "cellType": "markdown",
+    "id": "cell-pacman-18",
+    "index": 18,
+    "output": "",
+    "source": "3c. remember past experience\n\nEach memory stores the screen stack, move, reward, next screen, and whether the game ended. Random batches mix experiences from different moments. Consecutive stacks share three frames, so we only store the one new frame to save memory."
+  },
+  {
+    "aria": "Cell 19: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-19",
+    "index": 19,
+    "output": "",
+    "source": "class ReplayMemory:\n    def __init__(self, capacity):\n        self.items = deque(maxlen=capacity)\n\n    def add(self, obs, action, reward, next_obs, terminated, truncated):\n        # The next stack is [obs[1], obs[2], obs[3], new_frame].\n        # Store five frames instead of two overlapping four-frame stacks.\n        self.items.append((np.array(obs, dtype=np.uint8, copy=True), action,\n                           float(np.clip(reward, -1, 1)),\n                           np.array(next_obs[-1], dtype=np.uint8, copy=True),\n                           bool(terminated), bool(truncated)))\n\n    def sample(self, size, rng):\n        batch = rng.sample(list(self.items), size)\n        obs, actions, rewards, last_frames, ended, truncated = zip(*batch)\n        obs = np.stack(obs)\n        next_obs = np.concatenate([obs[:, 1:], np.stack(last_frames)[:, None]], axis=1)\n        return obs, np.array(actions), np.array(rewards, dtype=np.float32), next_obs, np.array(ended), np.array(truncated)\n\n    def __len__(self):\n        return len(self.items)\n"
+  },
+  {
+    "aria": "Cell 20: Text cell: 3d. choose a move",
+    "cellType": "markdown",
+    "id": "cell-pacman-20",
+    "index": 20,
+    "output": "",
+    "source": "3d. choose a move\n\nWith probability epsilon, try a random move (explore). Otherwise choose the move with the highest predicted value (exploit). Choosing a move does not update the network."
+  },
+  {
+    "aria": "Cell 21: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-21",
+    "index": 21,
+    "output": "",
+    "source": "@torch.no_grad()\ndef choose_action(model, obs, epsilon, rng, n_actions):\n    if rng.random() < epsilon:\n        return rng.randrange(n_actions)\n    device = next(model.parameters()).device\n    screens = torch.as_tensor(np.asarray(obs), device=device).unsqueeze(0)\n    return int(model(screens).argmax(dim=1).item())\n"
+  },
+  {
+    "aria": "Cell 22: Text cell: 3e. learn from a batch",
+    "cellType": "markdown",
+    "id": "cell-pacman-22",
+    "index": 22,
+    "output": "",
+    "source": "3e. learn from a batch\nPredict the value of each remembered move.\nBuild a target from its reward plus the next screen’s estimated value.\nMeasure the prediction error and adjust the network.\n\nThe target network changes less often to give learning a steadier reference. True game over removes future reward; reaching the time limit does not."
+  },
+  {
+    "aria": "Cell 23: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-23",
+    "index": 23,
+    "output": "",
+    "source": "def learn(model, target, optimizer, batch):\n    device = next(model.parameters()).device\n    obs, actions, rewards, next_obs, ended, truncated = [torch.as_tensor(x, device=device) for x in batch]\n    # 1. What value did the network predict for the move we took?\n    values = model(obs).gather(1, actions.long().unsqueeze(1)).squeeze(1)\n    # 2. What target does the observed reward suggest?\n    with torch.no_grad():\n        # Mask true termination only. A time limit still allows bootstrapping.\n        targets = rewards + GAMMA * (~ended).float() * target(next_obs).max(dim=1).values\n    # 3. Reduce the gap between prediction and target.\n    loss = nn.functional.smooth_l1_loss(values, targets)\n    if not torch.isfinite(loss):\n        raise RuntimeError(\"Loss became non-finite. Start a new run with a smaller learning rate.\")\n    optimizer.zero_grad(set_to_none=True)\n    loss.backward()\n    nn.utils.clip_grad_norm_(model.parameters(), 10.0, error_if_nonfinite=True)\n    optimizer.step()\n    return float(loss.item())\n"
+  },
+  {
+    "aria": "Cell 24: Text cell: 3f. select working hardware",
+    "cellType": "markdown",
+    "id": "cell-pacman-24",
+    "index": 24,
+    "output": "",
+    "source": "3f. select working hardware\n\nTry CUDA, Apple MPS, then CPU. A real batch tests prediction, backward pass, and a weight update before we commit to that device."
+  },
+  {
+    "aria": "Cell 25: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-25",
+    "index": 25,
+    "output": "",
+    "source": "def select_device(n_actions):\n    candidates = []\n    if torch.cuda.is_available():\n        candidates.append(\"cuda\")\n    if torch.backends.mps.is_available():\n        candidates.append(\"mps\")\n    candidates.append(\"cpu\")\n    for candidate in candidates:\n        try:\n            # Test the actual network, minibatch, backward pass, and optimizer.\n            probe = DQN(n_actions).to(candidate)\n            optimizer = torch.optim.Adam(probe.parameters(), lr=LEARNING_RATE)\n            screens = np.zeros((BATCH_SIZE, 4, 84, 84), dtype=np.uint8)\n            batch = (screens, np.zeros(BATCH_SIZE, dtype=np.int64),\n                     np.ones(BATCH_SIZE, dtype=np.float32), screens,\n                     np.zeros(BATCH_SIZE, dtype=bool), np.zeros(BATCH_SIZE, dtype=bool))\n            learn(probe, probe, optimizer, batch)\n            print(f\"Using {candidate.upper()}; training-batch check passed.\")\n            return torch.device(candidate)\n        except RuntimeError as error:\n            if candidate == \"cpu\":\n                raise\n            print(f\"{candidate.upper()} check failed ({error}). Trying the next device.\")\n"
+  },
+  {
+    "aria": "Cell 26: Text cell: check the first screen",
+    "cellType": "markdown",
+    "id": "cell-pacman-26",
+    "index": 26,
+    "output": "",
+    "source": "check the first screen\n\nCreate the game, check the four-screen stack, and show the available joystick moves. If this cell succeeds, the game and learning hardware are ready."
+  },
+  {
+    "aria": "Cell 27: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-27",
+    "index": 27,
+    "output": "",
+    "source": "probe_env = make_env()\ntry:\n    probe_obs, _ = probe_env.reset(seed=SEED)\n    assert probe_obs.shape == (4, 84, 84) and probe_obs.dtype == np.uint8\n    assert all(np.array_equal(probe_obs[0], frame) for frame in probe_obs)\n    N_ACTIONS = int(probe_env.action_space.n)\n    DEVICE = select_device(N_ACTIONS)\n    print(\"Available moves:\", probe_env.unwrapped.get_action_meanings())\n    display(PILImage.fromarray(probe_env.render()).resize((320, 420)))\nfinally:\n    probe_env.close()\nprint(f\"Replay pixel budget: {REPLAY_CAPACITY * 5 * 84 * 84 / 2**20:.0f} MiB, plus model and batch memory.\")\n"
+  },
+  {
+    "aria": "Cell 28: Text cell: gameplay, scores, and saved results",
+    "cellType": "markdown",
+    "id": "cell-pacman-28",
+    "index": 28,
+    "output": "",
+    "source": "4. gameplay, scores, and saved results\n\nEvaluation uses a separate game environment and the same five seeds before and after training. It uses 5% random moves in both cases. Evaluation never changes the network or training memory. The baseline is an untrained network, not a random-action agent.\n\nGIFs show the first 20 seconds at most, compressed to about five seconds at 4× speed; the reported score covers the entire evaluated game, up to the fixed time limit."
+  },
+  {
+    "aria": "Cell 29: Text cell: 4a. score complete games and record a short sample",
+    "cellType": "markdown",
+    "id": "cell-pacman-29",
+    "index": 29,
+    "output": "",
+    "source": "4a. score complete games and record a short sample\n\nAll evaluation games run at full computing speed, with no waiting for playback. We record a short excerpt, but add rewards for the entire game. For the final preview we keep the excerpt from the game with the highest full-game score."
+  },
+  {
+    "aria": "Cell 30: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-30",
+    "index": 30,
+    "output": "",
+    "source": "def evaluate(model, seeds, gif_path=None, record_best=False):\n    env = make_env()\n    scores, lengths, capped = [], [], []\n    best_score, chosen_frames = -float(\"inf\"), []\n    was_training = model.training\n    model.eval()\n    try:\n        for index, seed in enumerate(seeds):\n            rng = random.Random(seed + 10000)\n            obs, _ = env.reset(seed=seed)\n            total, frames = 0.0, []\n            capture = gif_path is not None and (record_best or index == 0)\n            for step in range(MAX_STEPS):\n                if capture and step < PREVIEW_DECISIONS and step % PREVIEW_STRIDE == 0:\n                    frames.append(PILImage.fromarray(env.render()).copy())\n                action = choose_action(model, obs, EVAL_EXPLORATION, rng, N_ACTIONS)\n                obs, reward, ended, truncated, _ = env.step(action)\n                total += reward\n                if ended or truncated:\n                    break\n            scores.append(float(total))\n            lengths.append(step + 1)\n            capped.append(bool(truncated))\n            if capture and (not record_best or total > best_score):\n                chosen_frames, best_score = frames, total\n    finally:\n        env.close()\n        model.train(was_training)\n    if gif_path is not None and chosen_frames:\n        chosen_frames[0].save(gif_path, save_all=True, append_images=chosen_frames[1:],\n                              duration=PREVIEW_FRAME_MS, loop=PREVIEW_PLAYS - 1)\n    return {\"seeds\": list(seeds), \"scores\": scores, \"mean\": float(np.mean(scores)),\n            \"steps\": lengths, \"time_limited\": capped}\n"
+  },
+  {
+    "aria": "Cell 31: Text cell: 4b. show the sample",
+    "cellType": "markdown",
+    "id": "cell-pacman-31",
+    "index": 31,
+    "output": "",
+    "source": "4b. show the sample\n\nAlways keep a playable GIF in the notebook. Both the inline GIF and the popup play exactly twice. When a local desktop and Tk are available, the separate floating player does not block the next learning update."
+  },
+  {
+    "aria": "Cell 32: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-32",
+    "index": 32,
+    "output": "",
+    "source": "def show_sample(gif_path, label):\n    \"\"\"Display a recorded excerpt inline and, locally, above the notebook.\"\"\"\n    print(f\"{label} | {PREVIEW_SPEED}× playback | {PREVIEW_PLAYS} plays | first {PREVIEW_SECONDS}s of game time\")\n    display(Image(filename=str(gif_path)))\n    if not SHOW_POPUPS:\n        return\n    try:\n        from pacman_player import show_popup\n        opened = show_popup(gif_path, f\"{label} · {PREVIEW_SPEED}× speed\")\n        if not opened:\n            print(\"Popup unavailable in this kernel; use the fast inline preview.\")\n    except (ImportError, OSError) as error:\n        print(f\"Using the inline preview. Local popup helper unavailable: {error}\")\n"
+  },
+  {
+    "aria": "Cell 33: Text cell: 4c. save a model for playback",
+    "cellType": "markdown",
+    "id": "cell-pacman-33",
+    "index": 33,
+    "output": "",
+    "source": "4c. save a model for playback\n\nA checkpoint stores the learned weights and action count. Reloading it lets us check the saved agent. It does not contain everything needed to resume the exact training session."
+  },
+  {
+    "aria": "Cell 34: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-34",
+    "index": 34,
+    "output": "",
+    "source": "def save_checkpoint(model, path, episode, steps):\n    # Portable playback checkpoint. This is not an exact training-resume snapshot:\n    # replay, optimizer, and emulator state are intentionally not persisted.\n    payload = {\"model\": {k: v.detach().cpu().clone() for k, v in model.state_dict().items()},\n               \"n_actions\": N_ACTIONS, \"episode\": episode, \"steps\": steps,\n               \"exploration\": EXPLORATION, \"learning_rate\": LEARNING_RATE}\n    temporary = path.with_suffix(\".tmp\")\n    torch.save(payload, temporary)\n    temporary.replace(path)\n"
+  },
+  {
+    "aria": "Cell 35: Text cell: 4d. save one row per game",
+    "cellType": "markdown",
+    "id": "cell-pacman-35",
+    "index": 35,
+    "output": "",
+    "source": "4d. save one row per game\n\nThe CSV keeps each completed game’s raw score, decisions, exploration, loss, and elapsed time. A game with no learning updates has no meaningful loss yet."
+  },
+  {
+    "aria": "Cell 36: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-36",
+    "index": 36,
+    "output": "",
+    "source": "def save_metrics(rows, path):\n    fields = [\"episode\", \"score\", \"steps\", \"total_steps\", \"exploration\", \"mean_loss\", \"elapsed_seconds\", \"terminated\", \"truncated\"]\n    with path.open(\"w\", newline=\"\") as handle:\n        writer = csv.DictWriter(handle, fieldnames=fields)\n        writer.writeheader()\n        writer.writerows(rows)\n"
+  },
+  {
+    "aria": "Cell 37: Text cell: 4e. draw the learning dashboard",
+    "cellType": "markdown",
+    "id": "cell-pacman-37",
+    "index": 37,
+    "output": "",
+    "source": "4e. draw the learning dashboard\n\nThe three panels show scores, prediction error, and exploration. Look at game scores as well as loss: reducing prediction error does not guarantee better play."
+  },
+  {
+    "aria": "Cell 38: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-38",
+    "index": 38,
+    "output": "",
+    "source": "def plot_training(rows, path):\n    fig, axes = plt.subplots(1, 3, figsize=(15, 4))\n    if rows:\n        episodes = [r[\"episode\"] for r in rows]\n        scores = [r[\"score\"] for r in rows]\n        smooth = [np.mean(scores[max(0, i - 24):i + 1]) for i in range(len(scores))]\n        axes[0].plot(episodes, scores, alpha=0.35, label=\"Each training game\")\n        axes[0].plot(episodes, smooth, label=\"Up to 25-game average\")\n        axes[0].legend(fontsize=8)\n        axes[1].plot(episodes, [r[\"mean_loss\"] for r in rows])\n        axes[2].plot(episodes, [r[\"exploration\"] for r in rows])\n    for ax, title in zip(axes, [\"Raw training score\", \"Mean update loss\", \"Training exploration\"]):\n        ax.set(title=title, xlabel=\"Completed episode\")\n        ax.grid(alpha=0.2)\n    axes[2].set_ylim(0, 1.05)\n    fig.tight_layout()\n    fig.savefig(path, dpi=150)\n    plt.close(fig)\n"
+  },
+  {
+    "aria": "Cell 39: Text cell: train your agent",
+    "cellType": "markdown",
+    "id": "cell-pacman-39",
+    "index": 39,
+    "output": "",
+    "source": "5. train your agent\n\nThe setup cell below starts a fresh experiment each time, using your three choices. It saves the untrained baseline, trains, and prints a line after each episode plus a progress update every 500 decisions. Every 25 episodes it opens a fast gameplay sample and saves a checkpoint and plot.\n\nTo stop early, use the notebook's Interrupt / Stop button once. The current model and completed-episode results are saved. Then run the remaining cells to evaluate and download them. A run ending before warm-up finishes has no learning updates yet. Each run has its own folder so earlier experiments stay available."
+  },
+  {
+    "aria": "Cell 40: Text cell: 5a. start a fresh experiment",
+    "cellType": "markdown",
+    "id": "cell-pacman-40",
+    "index": 40,
+    "output": "",
+    "source": "5a. start a fresh experiment\n\nCreate the two networks, empty replay memory, random seeds, and a unique results folder. This cell resets training. To try again, rerun from here or choose Run All."
+  },
+  {
+    "aria": "Cell 41: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-41",
+    "index": 41,
+    "output": "",
+    "source": "# Each execution starts fresh, including network weights and replay memory.\nrandom.seed(SEED)\nnp.random.seed(SEED)\ntorch.manual_seed(SEED)\ntrain_rng = random.Random(SEED)\nreplay_rng = random.Random(SEED + 1)\nRUN_DIR = Path(\"pacman_runs\") / datetime.now().strftime(\"%Y%m%d_%H%M%S_%f\")\nRUN_DIR.mkdir(parents=True, exist_ok=False)\n(RUN_DIR / \"demos\").mkdir()\nmodel = DQN(N_ACTIONS).to(DEVICE)\ntarget = DQN(N_ACTIONS).to(DEVICE)\ntarget.load_state_dict(model.state_dict())\ntarget.eval()\noptimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)\nreplay = ReplayMemory(REPLAY_CAPACITY)\nhistory, demo_history = [], []\ntotal_steps, completed_episodes, updates = 0, 0, 0\n\n_training_started = False\n"
+  },
+  {
+    "aria": "Cell 42: Text cell: 5b. record the settings and test saving",
+    "cellType": "markdown",
+    "id": "cell-pacman-42",
+    "index": 42,
+    "output": "",
+    "source": "5b. record the settings and test saving\n\nSave the hardware and settings alongside the initial weights. Reload those weights immediately to catch any checkpoint problem before training."
+  },
+  {
+    "aria": "Cell 43: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-43",
+    "index": 43,
+    "output": "",
+    "source": "config = {\"exploration\": EXPLORATION, \"episodes_requested\": EPISODES, \"learning_rate\": LEARNING_RATE,\n          \"seed\": SEED, \"device\": str(DEVICE), \"python\": platform.python_version(),\n          \"platform\": platform.platform(), \"packages\": VERSIONS,\n          \"environment\": \"ALE/MsPacman-v5\", \"frame_skip\": FRAME_SKIP,\n          \"sticky_action_probability\": 0.25, \"noop_max\": 30, \"grayscale_size\": 84,\n          \"stack_size\": 4, \"terminal_on_life_loss\": False, \"max_decisions_per_game\": MAX_STEPS,\n          \"replay_capacity\": REPLAY_CAPACITY, \"warmup_decisions\": WARMUP_STEPS,\n          \"batch_size\": BATCH_SIZE, \"train_every_decisions\": TRAIN_EVERY,\n          \"target_sync_decisions\": TARGET_EVERY, \"gamma\": GAMMA,\n          \"training_reward_clipping\": [-1, 1], \"eval_exploration\": EVAL_EXPLORATION,\n          \"eval_seeds\": EVAL_SEEDS, \"preview_seconds\": PREVIEW_SECONDS,\n          \"preview_speed\": PREVIEW_SPEED, \"preview_plays\": PREVIEW_PLAYS,\n          \"preview_stride\": PREVIEW_STRIDE,\n          \"preview_frame_ms\": PREVIEW_FRAME_MS}\n(RUN_DIR / \"config.json\").write_text(json.dumps(config, indent=2))\nsave_checkpoint(model, RUN_DIR / \"untrained.pt\", 0, 0)\n# Check saving and loading before starting the long run.\nroundtrip = torch.load(RUN_DIR / \"untrained.pt\", map_location=\"cpu\", weights_only=True)\nassert all(torch.equal(v.cpu(), roundtrip[\"model\"][k]) for k, v in model.state_dict().items())\ndel roundtrip\n"
+  },
+  {
+    "aria": "Cell 44: Text cell: 5c. measure the starting point",
+    "cellType": "markdown",
+    "id": "cell-pacman-44",
+    "index": 44,
+    "output": "",
+    "source": "5c. measure the starting point\n\nPlay five games before learning. This gives a baseline for the final comparison. The popup shows a short, accelerated excerpt from the first game."
+  },
+  {
+    "aria": "Cell 45: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-45",
+    "index": 45,
+    "output": "",
+    "source": "print(\"Evaluating the untrained network on five games. This can take a few minutes.\", flush=True)\nbaseline = evaluate(model, EVAL_SEEDS, RUN_DIR / \"demos\" / \"episode_0000.gif\")\n(RUN_DIR / \"baseline.json\").write_text(json.dumps(baseline, indent=2))\nprint(\"Before training:\", baseline[\"scores\"], \"| mean:\", baseline[\"mean\"])\nshow_sample(RUN_DIR / \"demos\" / \"episode_0000.gif\", \"Before training\")\n"
+  },
+  {
+    "aria": "Cell 46: Text cell: 5d. learn during one game",
+    "cellType": "markdown",
+    "id": "cell-pacman-46",
+    "index": 46,
+    "output": "",
+    "source": "5d. learn during one game\n\nRepeat choose → play → remember → learn until game over or the time limit. The counters span all games, so warm-up happens once. Every 1,000 decisions, copy the learning network into the target network."
+  },
+  {
+    "aria": "Cell 47: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-47",
+    "index": 47,
+    "output": "",
+    "source": "def train_one_episode(train_env, episode):\n    \"\"\"Collect experience and update the agent during one complete game.\"\"\"\n    global total_steps, updates\n    obs, _ = train_env.reset(seed=SEED + episode)\n    score, losses = 0.0, []\n    for step in range(MAX_STEPS):\n        epsilon = 1.0 if total_steps < WARMUP_STEPS else EXPLORATION\n        action = choose_action(model, obs, epsilon, train_rng, N_ACTIONS)\n        next_obs, reward, ended, truncated, _ = train_env.step(action)\n        replay.add(obs, action, reward, next_obs, ended, truncated)\n        obs = next_obs\n        score += reward\n        total_steps += 1\n        if total_steps >= WARMUP_STEPS and len(replay) >= BATCH_SIZE and total_steps % TRAIN_EVERY == 0:\n            losses.append(learn(model, target, optimizer, replay.sample(BATCH_SIZE, replay_rng)))\n            updates += 1\n        if total_steps % TARGET_EVERY == 0:\n            target.load_state_dict(model.state_dict())\n        if total_steps % 500 == 0:\n            elapsed = time.monotonic() - started\n            print(f\"  Episode {episode}/{EPISODES} | {total_steps:,} decisions | {updates:,} updates | {elapsed / 60:.1f} min\", flush=True)\n        if ended or truncated:\n            break\n    return {\"episode\": episode, \"score\": float(score), \"steps\": step + 1,\n            \"total_steps\": total_steps, \"exploration\": epsilon,\n            \"mean_loss\": float(np.mean(losses)) if losses else float(\"nan\"),\n            \"elapsed_seconds\": time.monotonic() - started,\n            \"terminated\": bool(ended), \"truncated\": bool(truncated)}\n"
+  },
+  {
+    "aria": "Cell 48: Text cell: 5e. save a progress sample",
+    "cellType": "markdown",
+    "id": "cell-pacman-48",
+    "index": 48,
+    "output": "",
+    "source": "5e. save a progress sample\n\nEvery 25 completed games, evaluate on a separate game, show the fast popup, and save a checkpoint. Evaluation does not add experiences to replay or change weights."
+  },
+  {
+    "aria": "Cell 49: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-49",
+    "index": 49,
+    "output": "",
+    "source": "def save_progress_sample(episode):\n    gif_path = RUN_DIR / \"demos\" / f\"episode_{episode:04d}.gif\"\n    demo = evaluate(model, EVAL_SEEDS[:1], gif_path)\n    demo_history.append({\"episode\": episode, **demo})\n    (RUN_DIR / \"demo_scores.json\").write_text(json.dumps(demo_history, indent=2))\n    print(\"Separate demonstration score:\", demo[\"scores\"][0])\n    save_checkpoint(model, RUN_DIR / f\"episode_{episode:04d}.pt\", episode, total_steps)\n    plot_training(history, RUN_DIR / \"training_dashboard.png\")\n    show_sample(gif_path, f\"After {episode} training games\")\n"
+  },
+  {
+    "aria": "Cell 50: Text cell: 5f. save the current result",
+    "cellType": "markdown",
+    "id": "cell-pacman-50",
+    "index": 50,
+    "output": "",
+    "source": "5f. save the current result\n\nRun this helper on completion, interruption, or failure. Checkpoints include all weight updates so far; the CSV contains completed games only."
+  },
+  {
+    "aria": "Cell 51: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-51",
+    "index": 51,
+    "output": "",
+    "source": "def save_training_result(status):\n    save_checkpoint(model, RUN_DIR / \"trained.pt\", completed_episodes, total_steps)\n    save_metrics(history, RUN_DIR / \"training.csv\")\n    plot_training(history, RUN_DIR / \"training_dashboard.png\")\n    summary = {\"status\": status, \"completed_episodes\": completed_episodes,\n               \"total_decisions\": total_steps, \"learning_updates\": updates,\n               \"elapsed_seconds_including_periodic_demos\": time.monotonic() - started}\n    (RUN_DIR / \"training_summary.json\").write_text(json.dumps(summary, indent=2))\n"
+  },
+  {
+    "aria": "Cell 52: Text cell: 5g. run the training games",
+    "cellType": "markdown",
+    "id": "cell-pacman-52",
+    "index": 52,
+    "output": "",
+    "source": "5g. run the training games\n\nThis is the experiment loop. Each call plays one game and prints its score. Interrupt / Stop saves the current model; then continue to section 6. To start another experiment, rerun from 5a so the model, baseline, and results folder all reset together."
+  },
+  {
+    "aria": "Cell 53: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-53",
+    "index": 53,
+    "output": "",
+    "source": "if _training_started:\n    raise RuntimeError(\"Start a new experiment by rerunning from section 5a, or use Run All.\")\n_training_started = True\ntrain_env = make_env()\nstarted = time.monotonic()\nstatus = \"completed\"\ntry:\n    for episode in range(1, EPISODES + 1):\n        row = train_one_episode(train_env, episode)\n        history.append(row)\n        completed_episodes = episode\n        recent_mean = np.mean([game[\"score\"] for game in history[-25:]])\n        print(f\"Episode {episode}/{EPISODES} | score {row['score']:.0f} | \"\n              f\"recent mean {recent_mean:.1f} | exploration {row['exploration']:.0%}\", flush=True)\n        save_metrics(history, RUN_DIR / \"training.csv\")\n        if episode % DEMO_EVERY == 0:\n            save_progress_sample(episode)\nexcept KeyboardInterrupt:\n    status = \"interrupted\"\n    print(\"Stopped early. Saving your agent; continue to section 6 for results.\")\nexcept Exception:\n    status = \"failed\"\n    raise\nfinally:\n    train_env.close()\n    save_training_result(status)\nprint(\"Saved:\", RUN_DIR)\nif updates == 0:\n    print(\"No learning updates yet: this run ended before a training batch was ready.\")\n"
+  },
+  {
+    "aria": "Cell 54: Text cell: did it learn?",
+    "cellType": "markdown",
+    "id": "cell-pacman-54",
+    "index": 54,
+    "output": "",
+    "source": "6. did it learn?\n\nCompare all five games under the same settings. The highlighted GIF is the best of these five trained games; it is an illustration, not the evidence by itself. Five games give a small comparison, not a reliable research estimate."
+  },
+  {
+    "aria": "Cell 55: Text cell: 6a. play the saved agent",
+    "cellType": "markdown",
+    "id": "cell-pacman-55",
+    "index": 55,
+    "output": "",
+    "source": "6a. play the saved agent\n\nReload the checkpoint and play the same five evaluation seeds. This tests both the saved file and the agent’s behavior."
+  },
+  {
+    "aria": "Cell 56: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-56",
+    "index": 56,
+    "output": "Evaluating the saved trained network on the same five games...\n",
+    "source": "# Load the saved model so the evaluation also verifies checkpoint playback.\ncheckpoint = torch.load(RUN_DIR / \"trained.pt\", map_location=\"cpu\", weights_only=True)\ntrained_model = DQN(checkpoint[\"n_actions\"]).to(DEVICE)\ntrained_model.load_state_dict(checkpoint[\"model\"])\nprint(\"Evaluating the saved trained network on the same five games...\", flush=True)\nafter = evaluate(trained_model, EVAL_SEEDS, RUN_DIR / \"demos\" / \"final_best.gif\", record_best=True)\n"
+  },
+  {
+    "aria": "Cell 57: Text cell: 6b. compare all five scores",
+    "cellType": "markdown",
+    "id": "cell-pacman-57",
+    "index": 57,
+    "output": "",
+    "source": "6b. compare all five scores\n\nPositive change means a higher average in this small test. A short run can get worse, and one good-looking sample is not enough to claim improvement."
+  },
+  {
+    "aria": "Cell 58: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-58",
+    "index": 58,
+    "output": "",
+    "source": "comparison = {\"baseline_kind\": \"untrained network\", \"before\": baseline, \"after\": after,\n              \"evaluation_exploration\": EVAL_EXPLORATION, \"max_decisions_per_game\": MAX_STEPS}\n(RUN_DIR / \"comparison.json\").write_text(json.dumps(comparison, indent=2))\nprint(f\"{'Game':>6} {'Before':>10} {'After':>10}\")\nfor game, (before_score, after_score) in enumerate(zip(baseline[\"scores\"], after[\"scores\"]), 1):\n    print(f\"{game:>6} {before_score:>10.0f} {after_score:>10.0f}\")\nprint(f\"{'Mean':>6} {baseline['mean']:>10.1f} {after['mean']:>10.1f}\")\nprint(f\"Change in mean score: {after['mean'] - baseline['mean']:+.1f}\")\nprint(\"Time-limited games before / after:\", sum(baseline[\"time_limited\"]), \"/\", sum(after[\"time_limited\"]))\ndisplay(Image(filename=str(RUN_DIR / \"training_dashboard.png\")))\nshow_sample(RUN_DIR / \"demos\" / \"final_best.gif\", \"Final saved agent\")\n"
+  },
+  {
+    "aria": "Cell 59: Text cell: save and explain your experiment",
+    "cellType": "markdown",
+    "id": "cell-pacman-59",
+    "index": 59,
+    "output": "",
+    "source": "7. save and explain your experiment\n\nThe next cell creates a ZIP containing your settings, package versions, all evaluation scores, training log, plot, GIFs, and playback checkpoints. In Colab, download it before ending the session. To try another setting, change the three choices and run all cells again; that starts from scratch.\n\nKeep the notebook, plot, selected GIFs, comparison, and your explanation in your GitHub submission. Model checkpoints can make repositories large; keep them locally or attach them to a GitHub release."
+  },
+  {
+    "aria": "Cell 60: Code cell: ",
+    "cellType": "code",
+    "id": "cell-pacman-60",
+    "index": 60,
+    "output": "",
+    "source": "archive = shutil.make_archive(str(RUN_DIR), \"zip\", root_dir=RUN_DIR)\ntry:\n    from google.colab import files\nexcept ImportError:\n    display(FileLink(archive, result_html_prefix=\"Download your experiment: \"))\nelse:\n    files.download(archive)\nprint(\"Results folder:\", RUN_DIR.resolve())"
+  },
+  {
+    "aria": "Cell 61: Text cell: your explanation",
+    "cellType": "markdown",
+    "id": "cell-pacman-61",
+    "index": 61,
+    "output": "",
+    "source": "your explanation\nMy choices: exploration = __, episodes = __, learning rate = __.\nMy prediction: I expected these settings to __ because __.\nWhat happened: mean score before = __; after = __. In the gameplay, I noticed __.\nOne limitation: __.\nMy next experiment: change only __ to __ and keep the other two settings fixed.\n\nThe agent observes four screens, chooses a joystick action, and receives game rewards. Lower training loss does not necessarily mean a higher game score. Report lack of progress if that is what happened.\n\nimplementation notes and sources\n\nThis is a small, readable DQN experiment, not a reproduction of a large Atari benchmark. Replay is deliberately small for laptops. Epsilon stays constant after warm-up. Checkpoints support playback; rerunning starts a new experiment, rather than resuming the optimizer, replay memory, or an interrupted game. GPU results can vary even with fixed seeds.\n\nALE installation and Gymnasium registration\nGymnasium Atari preprocessing\nGymnasium frame stacking\nDQN paper: Human-level control through deep reinforcement learning"
+  }
+]

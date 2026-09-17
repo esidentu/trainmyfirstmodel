@@ -1,0 +1,80 @@
+{
+  "note": "Media files were recovered from the executed Colab notebook outputs visible in the browser session.",
+  "public_repo": "https://github.com/esidentu/trainmyfirstmodel",
+  "colab_notebook": "https://colab.research.google.com/drive/1GbYqelRPSs4e1y1nG4w9lfNsjr5iZmP-",
+  "run_folder_in_colab": "/content/pacman_runs/20260916_040814_173931",
+  "files": [
+    {
+      "path": "results/colab_baseline_output.txt",
+      "bytes": 301
+    },
+    {
+      "path": "results/colab_comparison_output.txt",
+      "bytes": 433
+    },
+    {
+      "path": "results/colab_results_folder_output.txt",
+      "bytes": 60
+    },
+    {
+      "path": "results/colab_setup_output.txt",
+      "bytes": 204
+    },
+    {
+      "path": "results/colab_training_output.txt",
+      "bytes": 14851
+    },
+    {
+      "path": "results/comparison.json",
+      "bytes": 778
+    },
+    {
+      "path": "results/config.json",
+      "bytes": 1273
+    },
+    {
+      "path": "results/demo_scores.json",
+      "bytes": 394
+    },
+    {
+      "path": "results/first_screen.png",
+      "bytes": 17406
+    },
+    {
+      "path": "results/training_dashboard.png",
+      "bytes": 137605
+    },
+    {
+      "path": "results/training_summary.json",
+      "bytes": 811
+    },
+    {
+      "path": "results/training.csv",
+      "bytes": 2602
+    },
+    {
+      "path": "results/demos/episode_0000.gif",
+      "bytes": 32684
+    },
+    {
+      "path": "results/demos/episode_0025.gif",
+      "bytes": 29314
+    },
+    {
+      "path": "results/demos/episode_0050.gif",
+      "bytes": 32003
+    },
+    {
+      "path": "results/demos/episode_0075.gif",
+      "bytes": 37180
+    },
+    {
+      "path": "results/demos/episode_0100.gif",
+      "bytes": 28843
+    },
+    {
+      "path": "results/demos/final_best.gif",
+      "bytes": 29069
+    }
+  ]
+}

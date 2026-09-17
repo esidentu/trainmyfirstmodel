@@ -1,0 +1,31 @@
+{
+  "status": "completed",
+  "completed_episodes": 100,
+  "total_decisions": 60657,
+  "learning_updates": 14915,
+  "elapsed_seconds_including_periodic_demos": 253.178046264,
+  "last_25_training_mean": 808.4,
+  "demo_scores": [
+    {
+      "episode": 25,
+      "score": 740.0,
+      "gif": "results/demos/episode_0025.gif"
+    },
+    {
+      "episode": 50,
+      "score": 450.0,
+      "gif": "results/demos/episode_0050.gif"
+    },
+    {
+      "episode": 75,
+      "score": 720.0,
+      "gif": "results/demos/episode_0075.gif"
+    },
+    {
+      "episode": 100,
+      "score": 420.0,
+      "gif": "results/demos/episode_0100.gif"
+    }
+  ],
+  "artifacts_recovered_from": "Executed Colab page outputs because the Colab runtime download was not recoverable in the in-app browser."
+}

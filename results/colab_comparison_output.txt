@@ -1,0 +1,13 @@
+  Game     Before      After
+     1        350        420
+     2        500       2040
+     3        320        480
+     4        800       1100
+     5        490       1870
+  Mean      492.0     1182.0
+Change in mean score: +690.0
+Time-limited games before / after: 0 / 0
+
+Final saved agent | 4× playback | 2 plays | first 20s of game time
+
+Using the inline preview. Local popup helper unavailable: No module named 'pacman_player'

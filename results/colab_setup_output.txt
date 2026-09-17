@@ -1,0 +1,4 @@
+Using CUDA; training-batch check passed.
+Available moves: ['NOOP', 'UP', 'RIGHT', 'LEFT', 'DOWN', 'UPRIGHT', 'UPLEFT', 'DOWNRIGHT', 'DOWNLEFT']
+
+Replay pixel budget: 168 MiB, plus model and batch memory.
